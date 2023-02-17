@@ -1,0 +1,52 @@
+version: "3.4"
+x-app: &app-template
+    image: ncrmro/rust:watcher
+    tty: true
+    env_file:
+      - .env
+    environment:
+      TERM: xterm-256color
+      APP_ENV: development
+      DATABASE_URL: postgres://pexp:pexp@db:5432/pexp
+    depends_on:
+      - db
+    volumes:
+      - .:/app/
+      - cargo-cache:/usr/local/cargo
+      - target-cache:/app/target
+
+services:
+  app:
+    <<: *app-template
+    ports:
+      - 8000:8000
+  tests:
+    <<: *app-template
+    command: cargo watch --watch src --watch tests --exec 'test -- --nocapture'
+  migrations:
+    <<: *app-template
+    command: bash -c 'while !</dev/tcp/db/5432; do sleep 3; done; sqlx mig run'
+    volumes:
+      - ./migrations/:/app/migrations/:rw
+  db:
+    image: postgres:12.3-alpine
+    env_file:
+      - .env
+    volumes:
+      - pgdata/:/var/lib/postgresql/data
+    ports:
+      - 5432:5432
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready --username=pexp --dbname=pexp --timeout 30"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  pgdata:
+  cargo-cache:
+  target-cache:
+
+###
+# docker volume rm planet-express_pgdata
+###
